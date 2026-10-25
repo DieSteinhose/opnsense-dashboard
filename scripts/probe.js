@@ -13,7 +13,7 @@ const shape = (v, depth = 0) => {
   return typeof v;
 };
 
-async function check(name, fn, expect) {
+async function check(name, fn, expect, { optional = false } = {}) {
   const t = Date.now();
   try {
     const res = await fn();
@@ -23,7 +23,9 @@ async function check(name, fn, expect) {
     report[name] = { ok: false, ms: Date.now() - t, problems: [err.message] };
   }
   const r = report[name];
-  console.log(`${r.ok ? 'OK  ' : 'FAIL'} ${name.padEnd(18)} ${String(r.ms).padStart(5)} ms  ${r.problems.join('; ')}`);
+  const mark = r.ok ? 'OK  ' : optional ? '--  ' : 'FAIL';
+  if (!r.ok && optional) r.problems.push('(optional)');
+  console.log(`${mark} ${name.padEnd(18)} ${String(r.ms).padStart(5)} ms  ${r.problems.join('; ')}`);
 }
 
 await check('interfaceTraffic', () => client.interfaceTraffic(), (r) => {
@@ -68,6 +70,12 @@ await check('gateways', () => client.gateways(), (r) => (Array.isArray(r?.items)
 await check('systemTime', () => client.systemTime(), (r) => (r?.uptime ? [] : ['uptime missing']));
 await check('systemResources', () => client.systemResources(), (r) => (r?.memory ? [] : ['memory missing']));
 await check('systemInformation', () => client.systemInformation(), (r) => (r?.versions ? [] : ['versions missing']));
+const arpIp = await client.arp().then((r) => (Array.isArray(r) ? r : r?.rows || [])[0]?.ip).catch(() => null);
+await check('reverseLookup', () => client.reverseLookup([arpIp || '127.0.0.1']), (r) => (r && typeof r === 'object' ? [] : ['unexpected response']));
+// optional: only the DHCP server in use answers, the others report 404/403
+for (const source of ['dnsmasq', 'kea4', 'kea6', 'isc4', 'isc6']) {
+  await check(`leases:${source}`, () => client.leases(source), (r) => (Array.isArray(r?.rows) ? [] : ['no rows[]']), { optional: true });
+}
 
 fs.mkdirSync(config.dataDir, { recursive: true });
 const out = path.join(config.dataDir, 'probe.json');

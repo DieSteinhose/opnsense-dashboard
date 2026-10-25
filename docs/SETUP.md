@@ -27,7 +27,9 @@ Use a dedicated user, not your admin account.
    | `Diagnostics: NDP Table` | device names for IPv6 addresses |
    | `System: Gateways` | latency, packet loss, gateway status |
    | `Lobby: Dashboard` | uptime, load, memory, version |
+   | `Diagnostics: Network Insight` | reverse DNS for client names in "Top clients" |
    | `Services: Unbound` | DNS cache dump for domain names (optional, see note) |
+   | DHCP leases, one of `Services: Dnsmasq DNS/DHCP: Settings`, `Services: DHCP: Kea(v4)` | device names reported by the clients themselves (optional, see note) |
 
 3. In the user list click the **key icon** ("Create and download API key"), or in older versions use the **API keys → +** button on the user page. Your browser downloads a small text file:
 
@@ -41,6 +43,7 @@ Use a dedicated user, not your admin account.
 > **Security notes**
 > - `Diagnostics: Show States` also allows *killing* states via the API, and `Services: Unbound` also allows *changing* Unbound settings. OPNsense has no read-only variant of these two. The dashboard only reads, but treat the key like a password.
 > - Without `Services: Unbound` the dashboard works, it just cannot map IPs to domains (services are then recognised by port and network only).
+> - Client names come from the ARP table first, then from DHCP leases, then from reverse DNS. Reverse DNS only finds names if Unbound knows your local hosts (e.g. "Register DHCP leases" / Dnsmasq integration). The DHCP lease privileges also allow *changing* the DHCP configuration, so only grant one of them if reverse DNS does not give you names. Use the one matching your DHCP server.
 > - There is no dedicated privilege for the interface address list (`diagnostics/interface/get_interface_config`). Without it, private IPv4 networks are still detected automatically. If your LAN uses public IPv6 addresses, set `LOCAL_NETS` (see step 2) so they are counted as local clients.
 
 ## Step 2: Create the compose project

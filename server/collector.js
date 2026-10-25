@@ -2,6 +2,9 @@ import { EventEmitter } from 'node:events';
 import { CidrSet, isPublic, ipFamily } from './ip.js';
 
 const LIVE_POINTS = 300; // 10 minutes at 2 s
+const NAME_TTL_MS = 3600 * 1000; // re-resolve client names hourly
+const NAME_MISS_MS = 30 * 60 * 1000; // retry unresolvable addresses after 30 min
+const LEASE_SOURCES = ['dnsmasq', 'kea4', 'kea6', 'isc4', 'isc6'];
 const SKIP_IFACES = /^(lo\d*|enc\d*|pfsync\d*|pflog\d*)$/i;
 
 // Polls OPNsense, turns cumulative counters into deltas and rates, classifies
@@ -17,6 +20,9 @@ export class Collector extends EventEmitter {
     this.ownAddrs = new Set();
     this.clients = new Map(); // ip -> {ip, mac, hostname, vendor, iface}
     this.macs = new Map(); // mac -> {hostname, vendor}; lets IPv4 and IPv6 of one device count as one client
+    this.names = new Map(); // ip -> {name, source: 'lease'|'rdns'|null, ts}; client names not known from ARP
+    this.seenClients = new Set(); // client IPs that ever showed traffic, candidates for name lookups
+    this.leaseSources = new Map(); // lease source -> timestamp until which it is considered unavailable
     this.stateMemo = new Map(); // state id -> [bytes0, bytes1]
     this.statesPrimed = false;
     this.pending = new Map(); // flow aggregation buffer
@@ -29,6 +35,10 @@ export class Collector extends EventEmitter {
 
   async start() {
     await this.safe('meta', () => this.pollMeta());
+    // clients from the stored history get names too, not only the ones active right now
+    for (const key of this.store.clientKeys(Math.floor(Date.now() / 1000) - 30 * 86400)) {
+      if (ipFamily(key)) this.seenClients.add(key);
+    }
     this.every(this.config.intervals.meta, 'meta', () => this.pollMeta());
     this.every(this.config.intervals.traffic, 'traffic', () => this.pollTraffic());
     this.every(this.config.intervals.status, 'status', () => this.pollStatus());
@@ -36,6 +46,7 @@ export class Collector extends EventEmitter {
     this.every(this.config.intervals.states, 'states', () => this.pollStates());
     this.every(this.config.intervals.top, 'top', () => this.pollTop());
     this.every(60000, 'flush', () => this.flush());
+    this.every(60000, 'names', () => this.resolveNames());
     this.every(3600000, 'prune', () => this.store.prune(this.config.retention));
   }
 
@@ -122,13 +133,90 @@ export class Collector extends EventEmitter {
   clientInfo(ip) {
     const c = this.clients.get(ip);
     const m = c?.mac ? this.macs.get(c.mac) : null;
-    return { ip, key: c?.mac || ip, name: c?.hostname || m?.hostname || '', mac: c?.mac || '', vendor: c?.vendor || m?.vendor || '' };
+    const name = c?.hostname || m?.hostname || this.names.get(ip)?.name || '';
+    return { ip, key: c?.mac || ip, name, mac: c?.mac || '', vendor: c?.vendor || m?.vendor || '' };
+  }
+
+  // --- client names: DHCP leases first, reverse DNS (via OPNsense) second -----
+  // a client seen for the first time gets its name a few seconds later, not with the next minute tick
+  noteClient(ip) {
+    if (this.seenClients.has(ip)) return;
+    this.seenClients.add(ip);
+    if (this.nameTimer) return;
+    this.nameTimer = setTimeout(() => {
+      this.nameTimer = null;
+      this.safe('names', () => this.resolveNames());
+    }, 3000);
+    this.nameTimer.unref?.();
+  }
+
+  async resolveNames() {
+    await this.ingestLeases();
+    const now = Date.now();
+    const todo = [...this.seenClients].filter((ip) => {
+      if (this.clientInfo(ip).name && !this.names.has(ip)) return false; // ARP already knows it
+      const n = this.names.get(ip);
+      if (!n) return true;
+      if (n.source === 'lease') return false;
+      return now - n.ts > (n.name ? NAME_TTL_MS : NAME_MISS_MS);
+    });
+    for (let i = 0; i < todo.length; i += 50) {
+      const batch = todo.slice(i, i + 50);
+      const res = await this.client.reverseLookup(batch);
+      for (const ip of batch) {
+        const name = this.shortName(res?.[ip], ip);
+        this.names.set(ip, { name, source: name ? 'rdns' : null, ts: now });
+      }
+    }
+  }
+
+  async ingestLeases() {
+    const now = Date.now();
+    for (const source of LEASE_SOURCES) {
+      if ((this.leaseSources.get(source) || 0) > now) continue;
+      let res;
+      try {
+        res = await this.client.leases(source);
+      } catch {
+        // not installed (404) or no privilege (403): ask again in an hour
+        this.leaseSources.set(source, now + 3600 * 1000);
+        continue;
+      }
+      for (const r of res?.rows || []) {
+        const ip = String(r.address || r.ip || '').split('%')[0];
+        const name = this.shortName(r.hostname, ip);
+        if (!ip || !name) continue;
+        this.names.set(ip, { name, source: 'lease', ts: now });
+        const mac = String(r.hwaddr || r.mac || '').toLowerCase();
+        if (mac) {
+          const m = this.macs.get(mac) || { hostname: '', vendor: '' };
+          if (!m.hostname) this.macs.set(mac, { ...m, hostname: name });
+        }
+      }
+    }
+  }
+
+  // "gaming-pc.home.arpa." -> "gaming-pc" when it is the firewall's own domain
+  shortName(name, ip) {
+    if (!name || typeof name !== 'string') return '';
+    let n = name.trim().replace(/\.$/, '');
+    if (!n || n === ip) return '';
+    const domain = String(this.status.info?.name || '').split('.').slice(1).join('.');
+    if (domain && n.toLowerCase().endsWith('.' + domain.toLowerCase())) n = n.slice(0, -(domain.length + 1));
+    return n;
   }
 
   // breakdown keys are MAC addresses where known, IPs otherwise
   clientByKey(key) {
     const m = this.macs.get(key);
-    return m ? { name: m.hostname, vendor: m.vendor } : this.clientInfo(key);
+    if (!m) return this.clientInfo(key);
+    let name = m.hostname;
+    // no hostname for the MAC itself: use a resolved name of any of its addresses
+    for (const c of this.clients.values()) {
+      if (name) break;
+      if (c.mac === key) name = this.names.get(c.ip)?.name || '';
+    }
+    return { name, vendor: m.vendor };
   }
 
   // --- interface counters -> realtime rates + minute/hour totals -------------
@@ -211,6 +299,7 @@ export class Collector extends EventEmitter {
       const cat = this.classifier.category(service.category);
       add(agg.service, service.id, service.name, { category: cat.id }, down, up);
       add(agg.category, cat.id, cat.label, null, down, up);
+      this.noteClient(client);
       const ci = this.clientInfo(client);
       add(agg.client, ci.key, ci.name || null, { ip: client, mac: ci.mac, vendor: ci.vendor }, down, up);
       if (network) {
@@ -266,6 +355,7 @@ export class Collector extends EventEmitter {
         for (const d of r.details || []) if (d.address && !this.isLocal(d.address)) this.dns.addReverse(d.address, d.rname);
         if (r.rname && !this.isLocal(r.address)) this.dns.addReverse(r.address, r.rname);
         if (!this.isLocal(r.address) || this.ownAddrs.has(r.address)) continue;
+        this.noteClient(r.address);
         const ci = this.clientInfo(r.address);
         list.push({
           ip: r.address,

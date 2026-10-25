@@ -102,6 +102,24 @@ export class OpnsenseClient {
     return this.get('diagnostics/interface/get_ndp');
   }
 
+  // {"192.168.1.20": "gaming-pc.home.arpa"}; unresolvable addresses map to themselves
+  reverseLookup(ips) {
+    const qs = ips.map((ip) => 'address[]=' + encodeURIComponent(ip)).join('&');
+    return this.get('diagnostics/dns/reverse_lookup?' + qs);
+  }
+
+  // DHCP leases of whichever DHCP server is in use: {rows: [{address, hwaddr|mac, hostname}]}
+  leases(source) {
+    const paths = {
+      dnsmasq: 'dnsmasq/leases/search',
+      kea4: 'kea/leases4/search',
+      kea6: 'kea/leases6/search',
+      isc4: 'dhcpv4/leases/search_lease',
+      isc6: 'dhcpv6/leases/search_lease',
+    };
+    return this.get(paths[source]);
+  }
+
   // {"igb0": {ipv4: [{ipaddr, subnetbits}], ipv6: [...], ...}}
   interfaceConfig() {
     return this.get('diagnostics/interface/get_interface_config');

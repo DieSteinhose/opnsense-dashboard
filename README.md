@@ -78,7 +78,7 @@ npm run probe    # checks every API endpoint in use and writes data/probe.json
 
 ## Creating the API user in OPNsense
 
-The dashboard needs an API key of a dedicated user with these privileges: `Reporting: Traffic`, `Diagnostics: Show States`, `Diagnostics: ARP Table`, `Diagnostics: NDP Table`, `System: Gateways`, `Lobby: Dashboard` and optionally `Services: Unbound` (domain names). Details and security notes: [docs/SETUP.md](docs/SETUP.md#step-1-create-an-api-user-and-key-in-opnsense).
+The dashboard needs an API key of a dedicated user with these privileges: `Reporting: Traffic`, `Diagnostics: Show States`, `Diagnostics: ARP Table`, `Diagnostics: NDP Table`, `System: Gateways`, `Lobby: Dashboard`, `Diagnostics: Network Insight` (client names) and optionally `Services: Unbound` (domain names) or a DHCP lease privilege. Details and security notes: [docs/SETUP.md](docs/SETUP.md#step-1-create-an-api-user-and-key-in-opnsense).
 
 ## Optional: more data sources
 

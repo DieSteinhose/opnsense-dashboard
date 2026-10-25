@@ -15,6 +15,9 @@ const CLIENTS = [
 ];
 CLIENTS.push({ ip: '2a02:8071:1234:5600::20', mac: CLIENTS[0].mac, hostname: 'gaming-pc', vendor: 'ASRock', intf: 'igc1' });
 
+const NAMED_BY_ARP = new Set(['192.168.1.10', '192.168.1.20', '192.168.1.30']);
+const LEASED = new Set(['192.168.1.41', '192.168.1.42', '10.0.20.15']);
+
 // remote endpoints, real network ranges so the ASN lookup works in demo mode too
 const REMOTES = {
   steam: { host: 'cache2-fra1.steamcontent.com', ip: '155.133.248.36', port: 443, proto: 'tcp' },
@@ -222,8 +225,22 @@ export class MockClient {
     return { status: 'ok', data };
   }
 
+  // like on many real setups, ARP knows only some names; the rest come from DHCP leases or reverse DNS
   async arp() {
-    return CLIENTS.filter((c) => !c.ip.includes(':')).map((c) => ({ ip: c.ip, mac: c.mac, hostname: c.hostname, manufacturer: c.vendor, intf: c.intf, intf_description: c.intf === 'igc1' ? 'LAN' : 'IoT', expired: false, permanent: false, type: 'ethernet' }));
+    return CLIENTS.filter((c) => !c.ip.includes(':')).map((c) => ({ ip: c.ip, mac: c.mac, hostname: NAMED_BY_ARP.has(c.ip) ? c.hostname : '', manufacturer: c.vendor, intf: c.intf, intf_description: c.intf === 'igc1' ? 'LAN' : 'IoT', expired: false, permanent: false, type: 'ethernet' }));
+  }
+
+  async leases(source) {
+    if (source !== 'dnsmasq') throw Object.assign(new Error('HTTP 404'), { status: 404 });
+    const rows = CLIENTS.filter((c) => LEASED.has(c.ip)).map((c) => ({ address: c.ip, hwaddr: c.mac, hostname: c.hostname, if_descr: 'LAN' }));
+    return { rows, rowCount: rows.length, total: rows.length, current: 1 };
+  }
+
+  async reverseLookup(ips) {
+    return Object.fromEntries(ips.map((ip) => {
+      const c = CLIENTS.find((x) => x.ip === ip);
+      return [ip, c && !LEASED.has(ip) && !NAMED_BY_ARP.has(ip) ? `${c.hostname}.home.arpa` : ip];
+    }));
   }
 
   async ndp() {

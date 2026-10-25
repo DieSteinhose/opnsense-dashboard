@@ -68,8 +68,15 @@ export function createApi({ collector, store, classifier, dns, asn, config, vers
         system: collector.status.system,
         states: collector.status.states,
         clientsOnline,
-        flows: collector.liveFlows,
-        talkers: collector.topTalkers,
+        // names may have been resolved after the flows were aggregated
+        flows: {
+          ...collector.liveFlows,
+          clients: (collector.liveFlows.clients || []).map((c) => ({ ...c, label: collector.clientByKey(c.key).name || c.label })),
+        },
+        talkers: {
+          ...collector.topTalkers,
+          clients: collector.topTalkers.clients.map((c) => ({ ...c, name: collector.clientInfo(c.ip).name || c.name })),
+        },
       };
     },
 

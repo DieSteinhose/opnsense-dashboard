@@ -6,12 +6,17 @@ const nf = (d = 1) => new Intl.NumberFormat(locale, { maximumFractionDigits: d, 
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
 // ---------- formatting ----------
+// Rates are always shown in Mbit/s, small values get more decimals instead of a smaller unit
 function bitsParts(bps) {
-  const units = ['bit/s', 'kbit/s', 'Mbit/s', 'Gbit/s', 'Tbit/s'];
-  let v = Math.max(0, bps || 0), i = 0;
-  while (v >= 1000 && i < units.length - 1) (v /= 1000), i++;
-  return [nf(v >= 100 ? 0 : v >= 10 ? 1 : 2).format(v), units[i]];
+  const v = Math.max(0, bps || 0) / 1e6;
+  if (v > 0 && v < 0.01) return [`< ${nf(2).format(0.01)}`, 'Mbit/s'];
+  return [nf(v >= 100 ? 0 : v >= 10 ? 1 : 2).format(v), 'Mbit/s'];
 }
+// axis ticks: Mbit without "/s", decimals only where the scale needs them
+const fmtAxisMbit = (bps) => {
+  const v = bps / 1e6;
+  return `${nf(v === 0 || v >= 10 ? 0 : v >= 1 ? 1 : 3).format(v)} Mbit`;
+};
 function bytesParts(b) {
   const units = ['B', 'kB', 'MB', 'GB', 'TB', 'PB'];
   let v = Math.max(0, b || 0), i = 0;
@@ -61,7 +66,7 @@ const svcCat = (id) => meta?.services.find((s) => s.id === id)?.category;
 
 // ---------- charts ----------
 const tp = areaChart($('#tp-chart'), $('#tp-tip'), {
-  fmtY: (v, exact) => (exact ? fmtBits(v) : fmtBits(v).replace('/s', '')),
+  fmtY: (v, exact) => (exact ? fmtBits(v) : fmtAxisMbit(v)),
   fmtX: (ms) => (ui.tpMode === 'live' ? timeSec(ms) : ui.range === '30d' || ui.range === '7d' ? new Date(ms).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }) : time(ms)),
   fmtHead: (ms) => (ui.tpMode === 'live' ? timeSec(ms) : dateTime(ms)),
 });

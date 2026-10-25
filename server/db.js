@@ -105,6 +105,10 @@ export class Store {
       .all(kind, fromSec, toSec);
   }
 
+  clientKeys(fromSec) {
+    return this.db.prepare("SELECT DISTINCT key FROM flow_hour WHERE kind = 'client' AND ts >= ?").all(fromSec).map((r) => r.key);
+  }
+
   firstTs() {
     return this.db.prepare('SELECT MIN(ts) AS ts FROM traffic_hour').get()?.ts ?? null;
   }

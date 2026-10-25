@@ -72,3 +72,26 @@ test('day keys are ISO dates independent of the ICU build', async () => {
   const { dayKey } = await import('../server/api.js');
   assert.match(dayKey(Date.UTC(2026, 9, 25, 12) / 1000), /^2026-10-2[456]$/);
 });
+
+test('client names: ARP first, then DHCP lease, then reverse DNS without the local domain', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'insight-'));
+  const store = new Store(dir);
+  const dns = new DnsMap();
+  const classifier = new Classifier(path.join(ROOT, 'config/services.json'), { dns, asn: null });
+  const client = {
+    leases: async (src) => {
+      if (src !== 'kea4') throw new Error('HTTP 404');
+      return { rows: [{ address: '192.168.1.41', hwaddr: 'AA:BB:CC:00:00:41', hostname: 'phone' }] };
+    },
+    reverseLookup: async (ips) => Object.fromEntries(ips.map((ip) => [ip, ip === '192.168.1.44' ? 'laptop.home.arpa.' : ip])),
+  };
+  const col = new Collector({ client, store, classifier, dns, config, log: { warn() {}, info() {} } });
+  col.status.info = { name: 'opnsense.home.arpa' };
+  col.clients.set('192.168.1.10', { ip: '192.168.1.10', mac: 'aa:bb:cc:00:00:10', hostname: 'nas', vendor: '' });
+  ['192.168.1.10', '192.168.1.41', '192.168.1.44', '192.168.1.99'].forEach((ip) => col.seenClients.add(ip));
+  await col.resolveNames();
+  assert.equal(col.clientInfo('192.168.1.10').name, 'nas');
+  assert.equal(col.clientInfo('192.168.1.41').name, 'phone');
+  assert.equal(col.clientInfo('192.168.1.44').name, 'laptop');
+  assert.equal(col.clientInfo('192.168.1.99').name, '');
+});
