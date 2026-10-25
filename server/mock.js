@@ -6,7 +6,7 @@ const MBIT = 1e6 / 8; // bytes per second for 1 Mbit/s
 const CLIENTS = [
   { ip: '192.168.1.20', mac: 'a8:a1:59:12:34:01', hostname: 'gaming-pc', vendor: 'ASRock', intf: 'igc1' },
   { ip: '192.168.1.10', mac: '00:11:32:aa:bb:02', hostname: 'nas', vendor: 'Synology', intf: 'igc1' },
-  { ip: '192.168.1.30', mac: '64:1c:ae:45:67:03', hostname: 'wohnzimmer-tv', vendor: 'Samsung', intf: 'igc1' },
+  { ip: '192.168.1.30', mac: '64:1c:ae:45:67:03', hostname: 'living-room-tv', vendor: 'Samsung', intf: 'igc1' },
   { ip: '192.168.1.41', mac: 'f0:18:98:23:45:04', hostname: 'iphone', vendor: 'Apple', intf: 'igc1' },
   { ip: '192.168.1.42', mac: '3c:22:fb:66:77:05', hostname: 'macbook-pro', vendor: 'Apple', intf: 'igc1' },
   { ip: '192.168.1.44', mac: '98:fa:9b:11:22:06', hostname: 'office-laptop', vendor: 'Lenovo', intf: 'igc1' },

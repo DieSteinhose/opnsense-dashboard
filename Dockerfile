@@ -1,5 +1,5 @@
-# Plain Alpine with the distro Node.js (22.x, includes node:sqlite). No npm dependencies needed.
-FROM alpine:3.22
+# Plain Alpine with the distro Node.js (24.x LTS, includes node:sqlite). No npm dependencies needed.
+FROM alpine:3.24
 
 RUN apk add --no-cache nodejs tzdata \
  && addgroup -S -g 1000 app \

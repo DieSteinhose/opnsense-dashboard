@@ -1,95 +1,97 @@
-# Prompt für Claude Code (Desktop) – Test gegen eine echte OPNsense
+# Prompt for Claude Code (desktop): testing against a real OPNsense
 
-Den Block unten komplett in Claude Code auf dem Rechner einfügen, der Zugriff auf den Proxmox-Host bzw. die OPNsense hat. Vorher entscheiden: **Variante A** (eigene OPNsense, nur lesender API-Key, schneller und realistischer) oder **Variante B** (frische OPNsense-VM auf Proxmox, keine Gefahr für das Heimnetz). Die nicht gewählte Variante im Prompt löschen.
+Paste the block below into Claude Code on the machine that can reach the Proxmox host or the OPNsense. Decide first: **Option A** (your own OPNsense with a read-only API key, faster and more realistic) or **Option B** (a fresh OPNsense VM on Proxmox, no risk for the home network). Delete the option you do not use from the prompt.
 
 ---
 
 ```text
-Du arbeitest am Projekt "OPNsense Insight": ein Statistik-Dashboard im Stil des
-UniFi-Network-Dashboards für OPNsense (Node.js >= 22.13, keine npm-Abhängigkeiten,
-SQLite über node:sqlite, Frontend Vanilla JS ohne Build).
+You are working on "OPNsense Insight", a statistics dashboard for OPNsense in the
+style of the UniFi Network dashboard (Node.js >= 22.13, no npm dependencies,
+SQLite via node:sqlite, vanilla JS frontend without a build step).
 Repo: https://github.com/DieSteinhose/opnsense-dashboard
-Branch: lege von main einen Branch "verify/real-opnsense" an und arbeite NUR dort.
-README.md im Repo erklärt Architektur und Datenquellen. Lies es zuerst.
+Branch: create a branch "verify/real-opnsense" from main and work ONLY there.
+README.md explains the architecture and data sources. Read it first.
 
-Der Code wurde OHNE Zugriff auf eine echte OPNsense geschrieben, nur nach Doku und
-OPNsense-Quellcode (opnsense/core). Ein Demo-Modus (npm run demo) funktioniert.
-Deine Aufgabe: den Code gegen eine echte OPNsense verifizieren, Fehler beheben, und
-die Annahmen unten bestätigen oder korrigieren.
+The code was written WITHOUT access to a real OPNsense, based only on the docs and
+the OPNsense source code (opnsense/core). A demo mode (npm run demo) works.
+Your task: verify the code against a real OPNsense, fix bugs, and confirm or
+correct the assumptions below.
 
-== Umgebung ==
-[VARIANTE A – vorhandene OPNsense]
-- OPNsense erreichbar unter: <URL eintragen, z. B. https://192.168.1.1>
-- Lege dort (oder lass mich anlegen) einen Benutzer "insight" mit NUR lesenden Rechten
-  an und einen API-Key. Ändere KEINE Firewall-Regeln, Interfaces oder Dienste.
-  Keine POST-Aufrufe außer diagnostics/firewall/query_states (das ist nur eine Abfrage).
+== Environment ==
+[OPTION A – existing OPNsense]
+- OPNsense reachable at: <enter URL, e.g. https://192.168.1.1>
+- Create (or let me create) a user "insight" with READ-ONLY privileges and an API
+  key. Do NOT change firewall rules, interfaces or services.
+  No POST requests except diagnostics/firewall/query_states (it is only a query).
 
-[VARIANTE B – Test-VM auf Proxmox]
-- Proxmox-Host: <Host/IP eintragen>, Zugang: <SSH/API-Token eintragen>
-- Lege eine OPNsense-VM an (aktuelles ISO von opnsense.org, 2 vCPU, 4 GB RAM, 20 GB):
-  vtnet0 = WAN an der Bridge mit Internetzugang (DHCP), vtnet1 = LAN an einer neuen
-  isolierten Bridge (z. B. vmbr99, 192.168.99.1/24, DHCP an).
-- Lege eine kleine Linux-VM/LXC (Debian) an vmbr99 als "Client" an.
-- In OPNsense: Unbound als Resolver aktiv lassen (Standard), API-User + Key anlegen.
-- Erzeuge auf dem Client realistischen Traffic, damit es etwas zu messen gibt:
-  * großer Download über HTTPS (z. B. ein Debian-ISO mit curl, Rate notieren)
-  * Steam-ähnlich: curl auf einen Steam-CDN-Host, z. B.
-    https://cdn.cloudflare.steamstatic.com/steam/apps/570/header.jpg in einer Schleife
-  * Usenet-ähnlich: openssl s_client -connect news.eweka.nl:563 (Verbindung genügt)
-  * DNS-Abfragen über die OPNsense (dig @192.168.99.1 ...)
-  * einen IPv6-Fall, falls das WAN IPv6 hat
+[OPTION B – test VM on Proxmox]
+- Proxmox host: <enter host/IP>, access: <enter SSH/API token>
+- Create an OPNsense VM (current ISO from opnsense.org, 2 vCPU, 4 GB RAM, 20 GB):
+  vtnet0 = WAN on the bridge with internet access (DHCP), vtnet1 = LAN on a new
+  isolated bridge (e.g. vmbr99, 192.168.99.1/24, DHCP on).
+- Create a small Linux VM/LXC (Debian) on vmbr99 as the "client".
+- In OPNsense: keep Unbound as the resolver (default), create API user + key.
+- Generate realistic traffic on the client so there is something to measure:
+  * a large download over HTTPS (e.g. a Debian ISO with curl, note the rate)
+  * Steam-like: curl a Steam CDN host in a loop, e.g.
+    https://cdn.cloudflare.steamstatic.com/steam/apps/570/header.jpg
+  * Usenet-like: openssl s_client -connect news.eweka.nl:563 (a connection is enough)
+  * DNS queries through the OPNsense (dig @192.168.99.1 ...)
+  * an IPv6 case if the WAN has IPv6
 
-== Ablauf ==
-1. Repo klonen, Branch auschecken, `cp .env.example .env`, Werte eintragen.
-2. `npm test` (muss grün sein), dann `npm run probe`. Ergebnis und data/probe.json
-   lesen. Jede FAIL-Zeile untersuchen.
-3. `npm start`, Dashboard auf :8080 öffnen, mit Playwright oder dem Browser einen
-   Screenshot machen, Zahlen mit OPNsense vergleichen (Reporting > Traffic,
+== Procedure ==
+1. Clone the repo, check out the branch, `cp .env.example .env`, fill in values.
+2. `npm test` (must pass), then `npm run probe`. Read the output and
+   data/probe.json. Investigate every FAIL line.
+3. `npm start`, open the dashboard on :8080, take a screenshot with Playwright or
+   the browser, compare the numbers with OPNsense (Reporting > Traffic,
    Diagnostics > States).
 
-== Annahmen, die du konkret prüfen sollst ==
-A1  POST /api/diagnostics/firewall/query_states liefert rows[] mit id, direction
-    ("in"/"out"), src_addr, dst_addr, dst_port, proto und bytes als Array [a, b].
-A2  Für eine ausgehende Verbindung eines LAN-Clients ist bytes[0] = Upload
-    (Client -> Internet) und bytes[1] = Download. Prüfen mit einem großen Download:
-    der wachsende Wert muss bytes[1] sein. Falls umgekehrt: collector.js pollStates fixen.
-A3  Jede Verbindung erscheint einmal mit direction "in" (LAN-Seite) und ggf. einmal
-    mit "out" (WAN-Seite/NAT). Der Collector zählt nur "in". Prüfen, dass dadurch
-    nichts doppelt UND nichts gar nicht gezählt wird (auch bei Floating-Rules,
-    iface = "all", und bei IPv6 ohne NAT).
-A4  Die Summe der Dienste (Top Dienste, Fußzeile "x % zugeordnet") liegt bei großen
-    Downloads nahe an den WAN-Interface-Bytes. Den Anteil "Nicht erfasst" notieren.
-A5  GET /api/diagnostics/traffic/interface: Keys sind Interface-Keys (wan, lan, opt1)
-    mit "bytes received"/"bytes transmitted". WAN "received" = Download.
-A6  GET /api/diagnostics/traffic/top/lan: records[] mit address, rate_bits_in,
-    rate_bits_out, details[]. Ist rate_bits_in für einen LAN-Client wirklich sein
-    Download? (Gerade-aktiv-Liste "Clients")
+== Assumptions to verify ==
+A1  POST /api/diagnostics/firewall/query_states returns rows[] with id, direction
+    ("in"/"out"), src_addr, dst_addr, dst_port, proto and bytes as an array [a, b].
+A2  For an outbound connection of a LAN client, bytes[0] = upload
+    (client -> internet) and bytes[1] = download. Check with a large download:
+    the growing value must be bytes[1]. If it is the other way round, fix
+    pollStates in collector.js.
+A3  Every connection appears once with direction "in" (LAN side) and possibly once
+    with "out" (WAN side/NAT). The collector only counts "in". Check that nothing is
+    counted twice AND nothing is missed (also with floating rules, iface = "all",
+    and with IPv6 without NAT).
+A4  For large downloads, the sum of services (Top services, footer "x % attributed")
+    is close to the WAN interface bytes. Note the "Not tracked" share.
+A5  GET /api/diagnostics/traffic/interface: keys are interface keys (wan, lan, opt1)
+    with "bytes received"/"bytes transmitted". WAN "received" = download.
+A6  GET /api/diagnostics/traffic/top/lan: records[] with address, rate_bits_in,
+    rate_bits_out, details[]. Is rate_bits_in really the download of a LAN client?
+    ("Active now" list, "Clients" tab)
 A7  GET /api/unbound/diagnostics/dumpcache: {status, data:[{host, rrtype, value}]};
-    die Domain-Zuordnung (Top Ziele) zeigt echte Namen wie debian.org / steamstatic.com.
-A8  Pfade existieren in der installierten Version: diagnostics/system/system_time,
+    the domain mapping (Top destinations) shows real names like debian.org /
+    steamstatic.com.
+A8  The paths exist in the installed version: diagnostics/system/system_time,
     system_resources, system_information, routes/gateway/status,
     diagnostics/interface/get_arp, get_ndp, get_interface_config.
-A9  Lokale Netze werden aus get_interface_config richtig erkannt (Fußzeile im
-    Dashboard). Bei IPv6 mit Prefix Delegation: gilt das LAN-/64 als lokal?
-A10 Laufzeit von query_states bei vielen States (z. B. 5000+): bleibt der Poll unter
-    dem Intervall von 15 s? Last auf der OPNsense (top) beobachten.
-A11 Welche Privilegien braucht der API-User minimal? README-Abschnitt
-    "API-Benutzer in OPNsense anlegen" mit den echten Namen korrigieren.
+A9  Local networks are detected correctly from get_interface_config (dashboard
+    footer). With IPv6 prefix delegation: does the LAN /64 count as local?
+A10 Runtime of query_states with many states (e.g. 5000+): does the poll stay below
+    the 15 s interval? Watch the load on the OPNsense (top).
+A11 Which privileges does the API user need at minimum? Correct the README section
+    "Creating the API user in OPNsense" with the real names.
 
-== Regeln ==
-- Code-Stil des Projekts beibehalten (ES-Module, keine neuen npm-Abhängigkeiten).
-- Für jede bestätigte oder widerlegte Annahme einen kurzen Eintrag in
-  docs/VERIFICATION.md (Annahme, Ergebnis, OPNsense-Version, ggf. Fix).
-- Neue Tests in test/core.test.js, wenn du Logik änderst. `npm test` muss grün sein.
-- Keine Secrets, echten öffentlichen IPs oder MAC-Adressen committen
-  (data/ und .env sind in .gitignore; probe.json bleibt lokal).
-- Commits mit klaren Messages auf den Branch oben pushen, dann einen PR gegen main
-  erstellen, damit der Docker-Workflow die Änderungen testet.
-- Teste beide Sprachen kurz (LANGUAGE=de und LANGUAGE=en).
-- Am Ende: Zusammenfassung, was funktioniert, was gefixt wurde, was offen ist.
+== Rules ==
+- Keep the project's code style (ES modules, no new npm dependencies).
+- For every confirmed or refuted assumption, add a short entry to
+  docs/VERIFICATION.md (assumption, result, OPNsense version, fix if any).
+- Add tests to test/core.test.js when you change logic. `npm test` must pass.
+- Do not commit secrets, real public IPs or MAC addresses
+  (data/ and .env are in .gitignore; probe.json stays local).
+- Push commits with clear messages to the branch above, then open a PR against main
+  so the Docker workflow tests the changes.
+- Briefly test both languages (LANGUAGE=de and LANGUAGE=en).
+- At the end: a summary of what works, what was fixed and what is still open.
 
-Optional, falls Zeit bleibt: das Plugin os-ntopng installieren und prüfen, welche
-REST-Endpunkte (v2) Anwendungs-Statistiken je Host liefern (nDPI-Protokolle wie
-"Steam", "BitTorrent"). Ergebnis als Vorschlag in docs/VERIFICATION.md, noch nicht
-einbauen.
+Optional, if there is time: install the os-ntopng plugin and check which REST
+endpoints (v2) provide per-host application statistics (nDPI protocols such as
+"Steam", "BitTorrent"). Write the result as a proposal into docs/VERIFICATION.md,
+do not implement it yet.
 ```
