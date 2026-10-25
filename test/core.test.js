@@ -95,3 +95,25 @@ test('client names: ARP first, then DHCP lease, then reverse DNS without the loc
   assert.equal(col.clientInfo('192.168.1.44').name, 'laptop');
   assert.equal(col.clientInfo('192.168.1.99').name, '');
 });
+
+test('names from the top-talker list also label "Top clients" (MAC keyed), even if reverse DNS is forbidden', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'insight-'));
+  const store = new Store(dir);
+  const dns = new DnsMap();
+  const classifier = new Classifier(path.join(ROOT, 'config/services.json'), { dns, asn: null });
+  const client = {
+    topTalkers: async () => ({ lan: { records: [{ address: '192.168.1.44', rname: 'laptop.home.arpa', rate_bits_in: 1, rate_bits_out: 1, details: [] }] } }),
+    leases: async () => { throw Object.assign(new Error('HTTP 403'), { status: 403 }); },
+    reverseLookup: async () => { throw Object.assign(new Error('HTTP 403'), { status: 403 }); },
+  };
+  const col = new Collector({ client, store, classifier, dns, config, log: { warn() {}, info() {} } });
+  col.status.info = { name: 'opnsense.home.arpa' };
+  col.ifaces.set('lan', { key: 'lan', name: 'LAN', wan: false });
+  col.clients.set('192.168.1.44', { ip: '192.168.1.44', mac: 'aa:bb:cc:00:00:44', hostname: '', vendor: 'Lenovo' });
+  col.macs.set('aa:bb:cc:00:00:44', { hostname: '', vendor: 'Lenovo' });
+  await col.pollTop();
+  col.seenClients.add('192.168.1.99'); // unnamed client, forces a reverse lookup
+  await assert.rejects(col.resolveNames(), /Network Insight/);
+  assert.equal(col.clientByKey('aa:bb:cc:00:00:44').name, 'laptop'); // survives the failed lookup
+  clearTimeout(col.nameTimer);
+});

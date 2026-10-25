@@ -162,12 +162,27 @@ export class Collector extends EventEmitter {
     });
     for (let i = 0; i < todo.length; i += 50) {
       const batch = todo.slice(i, i + 50);
-      const res = await this.client.reverseLookup(batch);
+      let res;
+      try {
+        res = await this.client.reverseLookup(batch);
+      } catch (err) {
+        if (err.status === 403) throw new Error('reverse DNS needs the privilege "Diagnostics: Network Insight" (HTTP 403)');
+        throw err;
+      }
       for (const ip of batch) {
         const name = this.shortName(res?.[ip], ip);
-        this.names.set(ip, { name, source: name ? 'rdns' : null, ts: now });
+        if (name) this.learnName(ip, name, 'rdns');
+        // keep a name learned elsewhere, only remember the miss for the retry timer
+        else this.names.set(ip, { ...(this.names.get(ip) || { name: '', source: null }), ts: now });
       }
     }
+  }
+
+  learnName(ip, raw, source) {
+    const name = this.shortName(raw, ip);
+    if (!name) return;
+    if (source !== 'lease' && this.names.get(ip)?.source === 'lease') return; // the device's own DHCP name wins
+    this.names.set(ip, { name, source, ts: Date.now() });
   }
 
   async ingestLeases() {
@@ -186,7 +201,7 @@ export class Collector extends EventEmitter {
         const ip = String(r.address || r.ip || '').split('%')[0];
         const name = this.shortName(r.hostname, ip);
         if (!ip || !name) continue;
-        this.names.set(ip, { name, source: 'lease', ts: now });
+        this.learnName(ip, name, 'lease');
         const mac = String(r.hwaddr || r.mac || '').toLowerCase();
         if (mac) {
           const m = this.macs.get(mac) || { hostname: '', vendor: '' };
@@ -356,10 +371,12 @@ export class Collector extends EventEmitter {
         if (r.rname && !this.isLocal(r.address)) this.dns.addReverse(r.address, r.rname);
         if (!this.isLocal(r.address) || this.ownAddrs.has(r.address)) continue;
         this.noteClient(r.address);
+        // the firewall's top-talker script resolves names itself; keep them for "Top clients" too
+        if (r.rname) this.learnName(r.address, r.rname, 'rdns');
         const ci = this.clientInfo(r.address);
         list.push({
           ip: r.address,
-          name: ci.name || r.rname || '',
+          name: ci.name,
           vendor: ci.vendor,
           iface: this.ifaces.get(iface)?.name || iface,
           rx: Number(r.rate_bits_in) || 0,
