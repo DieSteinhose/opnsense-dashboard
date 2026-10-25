@@ -66,6 +66,7 @@ const svcCat = (id) => meta?.services.find((s) => s.id === id)?.category;
 
 // ---------- charts ----------
 const tp = areaChart($('#tp-chart'), $('#tp-tip'), {
+  mirror: true,
   fmtY: (v, exact) => (exact ? fmtBits(v) : fmtAxisMbit(v)),
   fmtX: (ms) => (ui.tpMode === 'live' ? timeSec(ms) : ui.range === '30d' || ui.range === '7d' ? new Date(ms).toLocaleDateString(locale, { day: '2-digit', month: '2-digit' }) : time(ms)),
   fmtHead: (ms) => (ui.tpMode === 'live' ? timeSec(ms) : dateTime(ms)),

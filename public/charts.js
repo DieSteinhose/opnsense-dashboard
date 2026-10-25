@@ -31,6 +31,16 @@ function niceMax(v) {
   return nice * exp;
 }
 
+// round tick step (1, 2, 2.5, 5 x 10^n) so that `target` steps cover maxVal
+function niceScale(maxVal, target) {
+  const raw = Math.max(maxVal, 1) / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / mag;
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * mag;
+  const ticks = Math.max(1, Math.ceil(maxVal / step - 1e-9));
+  return { max: step * ticks, ticks };
+}
+
 function roundTop(ctx, x, y, w, h, r) {
   r = Math.min(r, w / 2, Math.abs(h));
   ctx.beginPath();
@@ -61,39 +71,68 @@ export function tipHtml(head, rows) {
 const PAD = { l: 64, r: 12, t: 10, b: 24 };
 
 // --- area chart -------------------------------------------------------------
-export function areaChart(canvas, tip, { fmtY, fmtX, fmtHead }) {
+// mirror: the second series is drawn downwards from a shared zero line, each half
+// with its own scale (download above, upload below). Without it all series share one scale.
+export function areaChart(canvas, tip, { fmtY, fmtX, fmtHead, mirror = false, split = 0.6 }) {
   let data = { x: [], series: [] };
   let hover = -1;
   const { ctx, state } = setup(canvas, () => draw());
+
+  // one band per series: pixel range, direction and scale
+  function bands(ih) {
+    const s = data.series;
+    if (mirror && s.length === 2) {
+      const zero = PAD.t + Math.round(ih * split);
+      return [
+        { zero, top: PAD.t, dir: -1, ...niceScale(Math.max(1e5, ...s[0].values), 4) },
+        { zero, top: PAD.t + ih, dir: 1, ...niceScale(Math.max(1e5, ...s[1].values), 2) },
+      ];
+    }
+    const max = niceMax(Math.max(1, ...s.flatMap((x) => x.values)));
+    return s.map(() => ({ zero: PAD.t + ih, top: PAD.t, dir: -1, max, ticks: 4 }));
+  }
+  const yOf = (b, v) => b.zero + b.dir * (v / b.max) * Math.abs(b.zero - b.top);
 
   function draw() {
     const { w, h } = state;
     ctx.clearRect(0, 0, w, h);
     const n = data.x.length;
     const iw = w - PAD.l - PAD.r, ih = h - PAD.t - PAD.b;
-    const max = niceMax(Math.max(1, ...data.series.flatMap((s) => s.values)));
     const X = (i) => PAD.l + (n <= 1 ? iw : (i / (n - 1)) * iw);
-    const Y = (v) => PAD.t + ih - (v / max) * ih;
-    // grid + y labels
+    const bs = bands(ih);
+    const gridBands = bs.length ? (mirror && bs.length === 2 ? bs : [bs[0]]) : [{ zero: PAD.t + ih, top: PAD.t, dir: -1, max: 1, ticks: 4 }];
+    // grid + y labels per band
     ctx.font = '11px system-ui, sans-serif';
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'right';
-    for (let i = 0; i <= 4; i++) {
-      const v = (max / 4) * i;
-      const y = Math.round(Y(v)) + 0.5;
-      ctx.strokeStyle = i === 0 ? cssVar('--axis') : cssVar('--grid');
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(PAD.l, y);
-      ctx.lineTo(w - PAD.r, y);
-      ctx.stroke();
+    gridBands.forEach((b, bi) => {
+      for (let i = bi === 0 ? 0 : 1; i <= b.ticks; i++) {
+        const v = (b.max / b.ticks) * i;
+        const y = Math.round(yOf(b, v)) + 0.5;
+        ctx.strokeStyle = i === 0 ? cssVar('--axis') : cssVar('--grid');
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(PAD.l, y);
+        ctx.lineTo(w - PAD.r, y);
+        ctx.stroke();
+        ctx.fillStyle = cssVar('--muted');
+        ctx.fillText(i === 0 ? fmtY(0) : fmtY(v), PAD.l - 8, y);
+      }
+    });
+    // series names at the outer edge of each half, so the direction is never color-only
+    if (mirror && bs.length === 2) {
+      ctx.textAlign = 'right';
       ctx.fillStyle = cssVar('--muted');
-      ctx.fillText(fmtY(v), PAD.l - 8, y);
+      ctx.textBaseline = 'top';
+      ctx.fillText(`↓ ${data.series[0].name}`, w - PAD.r - 4, PAD.t + 2);
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(`↑ ${data.series[1].name}`, w - PAD.r - 4, PAD.t + ih - 2);
     }
     if (n < 2) return;
     // x labels, ~6 ticks
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
+    ctx.fillStyle = cssVar('--muted');
     const ticks = Math.max(2, Math.min(6, n, Math.floor(iw / 90)));
     for (let k = 0; k < ticks; k++) {
       const i = Math.round((k / (ticks - 1)) * (n - 1));
@@ -101,25 +140,26 @@ export function areaChart(canvas, tip, { fmtY, fmtX, fmtHead }) {
       ctx.textAlign = k === 0 ? 'left' : k === ticks - 1 ? 'right' : 'center';
       ctx.fillText(fmtX(data.x[i]), x, h - PAD.b + 8);
     }
-    for (const s of data.series) {
-      const color = cssVar(s.color);
-      const grad = ctx.createLinearGradient(0, PAD.t, 0, PAD.t + ih);
+    data.series.forEach((s, si) => {
+      const b = bs[si];
+      const Y = (v) => yOf(b, v);
+      const grad = ctx.createLinearGradient(0, b.top, 0, b.zero);
       grad.addColorStop(0, cssVar(s.fill));
       grad.addColorStop(1, 'transparent');
       ctx.beginPath();
       s.values.forEach((v, i) => (i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v))));
-      ctx.lineTo(X(n - 1), Y(0));
-      ctx.lineTo(X(0), Y(0));
+      ctx.lineTo(X(n - 1), b.zero);
+      ctx.lineTo(X(0), b.zero);
       ctx.closePath();
       ctx.fillStyle = grad;
       ctx.fill();
       ctx.beginPath();
       s.values.forEach((v, i) => (i ? ctx.lineTo(X(i), Y(v)) : ctx.moveTo(X(i), Y(v))));
-      ctx.strokeStyle = color;
+      ctx.strokeStyle = cssVar(s.color);
       ctx.lineWidth = 2;
       ctx.lineJoin = 'round';
       ctx.stroke();
-    }
+    });
     if (hover >= 0 && hover < n) {
       const x = Math.round(X(hover)) + 0.5;
       ctx.strokeStyle = cssVar('--axis');
@@ -129,15 +169,15 @@ export function areaChart(canvas, tip, { fmtY, fmtX, fmtHead }) {
       ctx.lineTo(x, PAD.t + ih);
       ctx.stroke();
       ctx.setLineDash([]);
-      for (const s of data.series) {
+      data.series.forEach((s, si) => {
         ctx.beginPath();
-        ctx.arc(X(hover), Y(s.values[hover]), 4, 0, Math.PI * 2);
+        ctx.arc(X(hover), yOf(bs[si], s.values[hover]), 4, 0, Math.PI * 2);
         ctx.fillStyle = cssVar(s.color);
         ctx.fill();
         ctx.lineWidth = 2;
         ctx.strokeStyle = cssVar('--card');
         ctx.stroke();
-      }
+      });
     }
   }
 
