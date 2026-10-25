@@ -41,6 +41,8 @@ Add your own rules to `services.json`, for example your Usenet provider or your 
 
 ## Getting started
 
+**Step-by-step guide (API key, Docker Compose, troubleshooting): [docs/SETUP.md](docs/SETUP.md)**
+
 ### Docker (recommended)
 
 GitHub Actions builds ready-made images for `linux/amd64` and `linux/arm64` (e.g. Raspberry Pi) on **Alpine 3.24** (Node.js 24 LTS) for every push to `main`:
@@ -77,13 +79,7 @@ npm run probe    # checks every API endpoint in use and writes data/probe.json
 
 ## Creating the API user in OPNsense
 
-1. *System → Access → Users*: create a new user, e.g. `insight`, without a login shell.
-2. Under **Effective Privileges**, grant read-only access only:
-   - `Diagnostics: ARP Table`, `Diagnostics: NDP Table`, `Diagnostics: Show States`, `Diagnostics: Traffic Graph`, `Diagnostics: Interface`, `Diagnostics: System Activity`
-   - `Status: Gateways`, `Reporting: Health`, `Services: Unbound DNS: Diagnostics`, `Dashboard (all)`
-3. Create a key under the user's **API keys** and put key and secret into `.env`.
-
-(Privilege names vary slightly between OPNsense versions. `npm run probe` shows what is missing: an `HTTP 403` means a missing privilege.)
+The dashboard needs an API key of a dedicated user with these privileges: `Reporting: Traffic`, `Diagnostics: Show States`, `Diagnostics: ARP Table`, `Diagnostics: NDP Table`, `System: Gateways`, `Lobby: Dashboard` and optionally `Services: Unbound` (domain names). Details and security notes: [docs/SETUP.md](docs/SETUP.md#step-1-create-an-api-user-and-key-in-opnsense).
 
 ## Optional: more data sources
 

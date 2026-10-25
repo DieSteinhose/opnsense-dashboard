@@ -9,4 +9,4 @@ services:
       - "8080:8080"
     volumes:
       - ./data:/data
-      # - ./config/services.json:/app/config/services.json:ro   # own service rules
+      # - ./services.json:/app/config/services.json:ro   # own service rules, see docs/SETUP.md

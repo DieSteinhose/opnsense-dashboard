@@ -75,8 +75,11 @@ A9  Local networks are detected correctly from get_interface_config (dashboard
     footer). With IPv6 prefix delegation: does the LAN /64 count as local?
 A10 Runtime of query_states with many states (e.g. 5000+): does the poll stay below
     the 15 s interval? Watch the load on the OPNsense (top).
-A11 Which privileges does the API user need at minimum? Correct the README section
-    "Creating the API user in OPNsense" with the real names.
+A11 Which privileges does the API user need at minimum? docs/SETUP.md lists the
+    names taken from the OPNsense ACL files; confirm them in the GUI and correct
+    docs/SETUP.md and the README if needed. get_interface_config seems to have no
+    dedicated privilege: check whether the local network detection needs a
+    different endpoint (e.g. api/interfaces/overview/*, "Status: Interfaces").
 
 == Rules ==
 - Keep the project's code style (ES modules, no new npm dependencies).
