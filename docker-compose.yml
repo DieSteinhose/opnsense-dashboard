@@ -1,0 +1,12 @@
+services:
+  opnsense-insight:
+    image: ghcr.io/diesteinhose/opnsense-dashboard:latest
+    # build: .            # alternatively build locally
+    container_name: opnsense-insight
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+      # - ./config/services.json:/app/config/services.json:ro   # own service rules

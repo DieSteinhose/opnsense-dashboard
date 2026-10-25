@@ -1,0 +1,17 @@
+{
+  "name": "opnsense-insight",
+  "version": "0.1.0",
+  "description": "UniFi-style traffic and service statistics dashboard for OPNsense",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --no-warnings=ExperimentalWarning server/index.js",
+    "demo": "DEMO=1 node --no-warnings=ExperimentalWarning server/index.js",
+    "test": "node --no-warnings=ExperimentalWarning --test test/*.test.js",
+    "probe": "node --no-warnings=ExperimentalWarning scripts/probe.js"
+  },
+  "license": "MIT"
+}
