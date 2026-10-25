@@ -51,7 +51,6 @@ On the Docker host:
 mkdir -p ~/opnsense-insight && cd ~/opnsense-insight
 curl -fsSLO https://raw.githubusercontent.com/DieSteinhose/opnsense-dashboard/main/docker-compose.yml
 curl -fsSL  https://raw.githubusercontent.com/DieSteinhose/opnsense-dashboard/main/.env.example -o .env
-mkdir -p data && sudo chown 1000:1000 data   # the container runs as uid 1000
 ```
 
 Edit `.env`. The minimum:
@@ -72,6 +71,8 @@ LOCAL_NETS=2a02:1234:5678:100::/56    # your delegated IPv6 prefix, if any
 OPNSENSE_INSECURE=true                # default: accept the self-signed OPNsense certificate
 # OPNSENSE_CA=/certs/ca.pem           # better: trust your own CA (mount it in docker-compose.yml)
 ```
+
+The container stores its data in `./data` and makes that directory writable for itself on start (as uid/gid 1000, change with `PUID`/`PGID` if you want the files to belong to your own user).
 
 The interface key is the internal OPNsense name (`wan`, `lan`, `opt1`, ...), not the description you gave the interface. For a PPPoE uplink it is still `wan`.
 
@@ -152,7 +153,7 @@ Then `docker compose up -d`. The format is explained at the top of the file and 
 | WAN shows 0 | `WAN_INTERFACES` does not match the interface key. The Interfaces table in the dashboard shows each interface with its key, and the probe prints the available keys. |
 | No domain names, only IPs | `Services: Unbound` privilege missing, clients use another DNS server, or browsers use DNS over HTTPS. |
 | Large "Not tracked" share | Many short-lived connections between state polls. Lower `POLL_STATES_MS` (e.g. `5000`). |
-| `EACCES` / `unable to open database file` | `./data` is not writable for uid 1000: `sudo chown 1000:1000 data`. |
+| `cannot open /data/insight.db` / `unable to open database file` | The container fixes the owner of `./data` on start. This fails on NFS/CIFS mounts with root squash, or when you run the container with `user:`. Then run `sudo chown -R 1000:1000 ./data` on the host (or the `PUID`/`PGID` you set). On SELinux hosts (Fedora, RHEL) add `:Z` to the volume: `./data:/data:Z`. |
 | `[asn] lookup disabled` | The container cannot reach iptoasn.com. Everything else works; networks and countries stay empty. Set `ASN_LOOKUP=false` to silence it. |
 
 ## Exposing it

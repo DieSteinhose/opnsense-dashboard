@@ -8,8 +8,14 @@ import { DatabaseSync } from 'node:sqlite';
 //  flow_hour     classified traffic per hour and dimension (service, category, client, asn, country, dest)
 export class Store {
   constructor(dataDir) {
-    fs.mkdirSync(dataDir, { recursive: true });
-    this.db = new DatabaseSync(path.join(dataDir, 'insight.db'));
+    const file = path.join(dataDir, 'insight.db');
+    try {
+      fs.mkdirSync(dataDir, { recursive: true });
+      this.db = new DatabaseSync(file);
+    } catch (err) {
+      const uid = typeof process.getuid === 'function' ? process.getuid() : '?';
+      throw new Error(`cannot open ${file} (${err.message}). The data directory must be writable for uid ${uid}, e.g. "sudo chown -R ${uid}:${uid} ./data" on the Docker host.`, { cause: err });
+    }
     this.db.exec(`
       PRAGMA journal_mode = WAL;
       PRAGMA synchronous = NORMAL;

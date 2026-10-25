@@ -49,7 +49,6 @@ GitHub Actions builds ready-made images for `linux/amd64` and `linux/arm64` (e.g
 
 ```bash
 cp .env.example .env      # set OPNSENSE_URL, OPNSENSE_KEY, OPNSENSE_SECRET, LANGUAGE
-mkdir -p data && sudo chown 1000:1000 data
 docker compose up -d      # pulls ghcr.io/diesteinhose/opnsense-dashboard:latest
 # http://<host>:8080
 ```
