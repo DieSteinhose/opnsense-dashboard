@@ -156,6 +156,20 @@ Then `docker compose up -d`. The format is explained at the top of the file and 
 | `cannot open /data/insight.db` / `unable to open database file` | The container fixes the owner of `./data` on start. This fails on NFS/CIFS mounts with root squash, or when you run the container with `user:`. Then run `sudo chown -R 1000:1000 ./data` on the host (or the `PUID`/`PGID` you set). On SELinux hosts (Fedora, RHEL) add `:Z` to the volume: `./data:/data:Z`. |
 | `[asn] lookup disabled` | The container cannot reach iptoasn.com. Everything else works; networks and countries stay empty. Set `ASN_LOOKUP=false` to silence it. |
 
+### Permission problems with `./data` (Dockge, Portainer, NAS shares)
+
+The container makes `./data` writable for itself on start and falls back to running as root if the directory cannot be handed over. If it still fails, the log starts with `[entrypoint]` lines showing the owner and the mount type of `/data`. The simplest way out is a named volume managed by Docker instead of a folder:
+
+```yaml
+    volumes:
+      - insight-data:/data
+
+volumes:
+  insight-data:
+```
+
+(`volumes:` at the end belongs to the top level of the compose file, not under the service.)
+
 ## Exposing it
 
 The dashboard has **no login**. Keep it in your LAN, or put it behind a reverse proxy with authentication (e.g. Traefik, Caddy or nginx with basic auth, Authelia, or a VPN). Do not forward port 8080 to the internet.
